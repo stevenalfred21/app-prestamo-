@@ -46,6 +46,11 @@
     }
   }
 
+  // App instalada en Android (Capacitor): sin descargas ni Web Share, se usan los plugins nativos.
+  const cap = window.Capacitor;
+  const esAndroid = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
+  const nativo = (plugin, metodo, opciones) => cap.nativePromise(plugin, metodo, opciones);
+
   const nuevoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   // ---------- Utilidades ----------
@@ -609,7 +614,7 @@
       <div class="botones">
         <a class="btn whatsapp" href="https://wa.me/${tel}?text=${encodeURIComponent(texto)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
         <button class="btn" data-accion="copiarEstado">Copiar</button>
-        ${navigator.share ? '<button class="btn" data-accion="compartirEstado">Compartir</button>' : ''}
+        ${navigator.share || esAndroid ? '<button class="btn" data-accion="compartirEstado">Compartir</button>' : ''}
       </div>
       ${tel ? '' : '<p class="suave">El cliente no tiene teléfono guardado: WhatsApp te pedirá escoger el contacto.</p>'}
       ${tel && !db.ajustes.codigoPais && tel.length <= 10 ? '<p class="suave rojo">El teléfono no tiene código de país y WhatsApp lo necesita. Ponlo en <a href="#/ajustes">Ajustes</a>.</p>' : ''}`;
@@ -638,6 +643,7 @@
 
   acciones.compartirEstado = async () => {
     try {
+      if (esAndroid) return await nativo('Share', 'share', { text: vistaEstado.texto });
       await navigator.share({ text: vistaEstado.texto });
     } catch (e) { /* cancelado */ }
   };
@@ -698,6 +704,15 @@
   acciones.exportar = async () => {
     const txt = JSON.stringify(db, null, 2);
     const nombre = `respaldo-prestamos-${hoy()}.json`;
+    if (esAndroid) {
+      try {
+        const { uri } = await nativo('Filesystem', 'writeFile', { path: nombre, data: txt, directory: 'CACHE', encoding: 'utf8' });
+        await nativo('Share', 'share', { title: nombre, files: [uri], dialogTitle: 'Guardar respaldo' });
+      } catch (e) {
+        if (!/cancel/i.test(e.message || '')) alert('No se pudo exportar: ' + (e.message || e));
+      }
+      return;
+    }
     const archivo = new File([txt], nombre, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [archivo] }) && confirm('¿Compartir el respaldo (Drive, WhatsApp, correo…)?\n\nCancelar = descargarlo como archivo.')) {
       try {
@@ -783,7 +798,7 @@
   // ---------- Inicio ----------
 
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  if ('serviceWorker' in navigator && location.protocol !== 'file:' && !esAndroid) {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
   }
   rutear();

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Préstamos</string>
+    <string name="title_activity_main">Préstamos</string>
+    <string name="package_name">com.stevenalfred.prestamos</string>
+    <string name="custom_url_scheme">com.stevenalfred.prestamos</string>
+</resources>

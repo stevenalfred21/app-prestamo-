@@ -1,0 +1,51 @@
+{
+  "name": "prestamos",
+  "productName": "Préstamos",
+  "version": "1.0.0",
+  "description": "Control de préstamos con rédito quincenal",
+  "author": "stevenalfred21",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "build:web": "node scripts/build-web.js",
+    "test": "node scripts/test-calc.js",
+    "escritorio": "npm run build:web && electron .",
+    "dist:win": "npm run build:web && electron-builder --win nsis --publish never",
+    "android:sync": "npm run build:web && cap sync android"
+  },
+  "build": {
+    "appId": "com.stevenalfred.prestamos",
+    "productName": "Préstamos",
+    "files": [
+      "electron/**",
+      "www/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Préstamos",
+      "artifactName": "Prestamos-Setup-${version}.exe"
+    }
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/share": "^8.0.3",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  }
+}
