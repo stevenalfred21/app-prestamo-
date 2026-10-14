@@ -2,9 +2,12 @@
  * Motor de cálculo de préstamos con rédito quincenal.
  *
  * Reglas:
- * - Los cortes son el día 15 y el 30 de cada mes (en febrero, el último día del mes).
- * - Cada quincena genera un rédito = capital pendiente al inicio de la quincena × porcentaje.
- *   La primera quincena va desde la fecha del préstamo hasta el primer corte posterior.
+ * - Préstamo quincenal: los cortes son el día 15 y el 30 de cada mes (en febrero, el último día).
+ * - Préstamo mensual: un corte al mes, el día de cobro escogido (si el mes es más corto,
+ *   el último día del mes).
+ * - Cada período genera un rédito = capital pendiente al inicio del período × porcentaje.
+ *   El primer período va desde la fecha del préstamo hasta el primer corte posterior y se
+ *   cobra completo.
  * - Un pago cubre primero el rédito atrasado (quincenas ya vencidas), luego el rédito
  *   de la quincena en curso, y lo que sobre se descuenta del capital.
  * - Un abono a capital reduce el rédito a partir de la quincena siguiente.
@@ -50,6 +53,24 @@
     return armar(py, pm, segundoCorte(py, pm));
   }
 
+  // Primer corte mensual estrictamente posterior a la fecha, para un día de cobro dado.
+  function siguienteCorteMensual(s, dia) {
+    const { y, m } = partes(s);
+    const enEsteMes = armar(y, m, Math.min(dia, diasDelMes(y, m)));
+    if (enEsteMes > s) return enEsteMes;
+    const ny = m === 12 ? y + 1 : y;
+    const nm = m === 12 ? 1 : m + 1;
+    return armar(ny, nm, Math.min(dia, diasDelMes(ny, nm)));
+  }
+
+  const esMensual = (prestamo) => prestamo.frecuencia === 'mensual';
+  const diaCobro = (prestamo) => Number(prestamo.diaCobro) || partes(prestamo.fecha).d;
+
+  // Siguiente corte según la frecuencia del préstamo (los préstamos viejos no tienen frecuencia: son quincenales).
+  function siguienteCorteDe(prestamo, s) {
+    return esMensual(prestamo) ? siguienteCorteMensual(s, diaCobro(prestamo)) : siguienteCorte(s);
+  }
+
   function esCorte(s) {
     const { y, m, d } = partes(s);
     return d === 15 || d === segundoCorte(y, m);
@@ -80,7 +101,7 @@
     const periodos = [];
     const nuevo = (inicio) => ({
       inicio,
-      corte: siguienteCorte(inicio),
+      corte: siguienteCorteDe(prestamo, inicio),
       base: capital,
       redito: r2(capital * tasa),
       pagado: 0,
@@ -139,18 +160,21 @@
     };
   }
 
-  // Lista de cortes entre dos fechas (incluidas), de más reciente a más antiguo.
-  function cortesEntre(desde, hasta) {
+  // Cortes de un préstamo desde su fecha hasta `hasta` (incluida), de más antiguo a más reciente.
+  function cortesDe(prestamo, hasta) {
     const lista = [];
-    let c = esCorte(desde) ? desde : siguienteCorte(desde);
+    let c = siguienteCorteDe(prestamo, prestamo.fecha);
     while (c <= hasta) {
       lista.push(c);
-      c = siguienteCorte(c);
+      c = siguienteCorteDe(prestamo, c);
     }
-    return lista.reverse();
+    return lista;
   }
 
-  const api = { r2, siguienteCorte, corteAnterior, esCorte, calcularPrestamo, cortesEntre };
+  const api = {
+    r2, siguienteCorte, siguienteCorteMensual, siguienteCorteDe, corteAnterior, esCorte,
+    esMensual, diaCobro, calcularPrestamo, cortesDe,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);

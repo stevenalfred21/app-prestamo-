@@ -97,18 +97,23 @@
   const prestamosDe = (clienteId) =>
     db.prestamos.filter((p) => p.clienteId === clienteId).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
 
+  // Palabras según la frecuencia del préstamo
+  const frec = (p) => (Calc.esMensual(p) ? 'mensual' : 'quincenal');
+  const delPeriodo = (p) => (Calc.esMensual(p) ? 'del mes' : 'de la quincena');
+  const estePeriodo = (p) => (Calc.esMensual(p) ? 'este mes' : 'esta quincena');
+
   const calc = (p, hasta) => Calc.calcularPrestamo(p, db.pagos, hasta || hoy());
 
   function resumenCliente(clienteId) {
-    let capital = 0, atrasado = 0, quincena = 0, activos = 0;
+    let capital = 0, atrasado = 0, enCurso = 0, activos = 0;
     for (const p of prestamosDe(clienteId)) {
       const r = calc(p);
       capital += r.capital;
       atrasado += r.reditoAtrasado;
-      quincena += r.reditoActualPendiente;
+      enCurso += r.reditoActualPendiente;
       if (!r.saldado) activos++;
     }
-    return { capital: Calc.r2(capital), atrasado: Calc.r2(atrasado), quincena: Calc.r2(quincena), activos };
+    return { capital: Calc.r2(capital), atrasado: Calc.r2(atrasado), enCurso: Calc.r2(enCurso), activos };
   }
 
   function telefonoWhatsApp(tel) {
@@ -164,29 +169,26 @@
 
   function vistaResumen() {
     const h = hoy();
-    let prestado = 0, capital = 0, atrasado = 0, quincena = 0, reditoCobrado = 0, activos = 0;
+    let prestado = 0, capital = 0, atrasado = 0, enCurso = 0, reditoCobrado = 0, activos = 0;
     const morosos = [];
+    const proximos = [];
     for (const p of db.prestamos) {
       const r = calc(p, h);
       prestado += Number(p.monto);
       capital += r.capital;
       atrasado += r.reditoAtrasado;
-      quincena += r.reditoActualPendiente;
+      enCurso += r.reditoActualPendiente;
       reditoCobrado += r.reditoPagado;
       if (!r.saldado) activos++;
+      if (!r.saldado && r.reditoActualPendiente > 0) proximos.push({ p, r });
       if (r.reditoAtrasado > 0) morosos.push({ p, r });
     }
-    const proximo = Calc.siguienteCorte(h);
-    const corteHoy = Calc.esCorte(h);
-
     let html = `
       <div class="cifras">
         <div class="cifra ancha">
-          <div class="et">Rédito a cobrar ${corteHoy ? 'hoy (corte)' : 'en el próximo corte'}</div>
-          <div class="val">${dinero(corteHoy ? atrasado : atrasado + quincena)}</div>
-          <div class="suave">${corteHoy
-            ? `Corte de hoy ${fecha(h)}. Siguiente: ${fecha(proximo)} (${dinero(quincena)})`
-            : `Corte del ${fecha(proximo)}${atrasado > 0 ? ` · incluye ${dinero(atrasado)} atrasado` : ''}`}</div>
+          <div class="et">Rédito por cobrar</div>
+          <div class="val">${dinero(atrasado + enCurso)}</div>
+          <div class="suave">${atrasado > 0 ? `Vencido (cortes hasta hoy): ${dinero(atrasado)} · ` : ''}Próximos cortes: ${dinero(enCurso)}</div>
         </div>
         <div class="cifra"><div class="et">Capital pendiente</div><div class="val">${dinero(capital)}</div></div>
         <div class="cifra"><div class="et">Total prestado</div><div class="val">${dinero(prestado)}</div></div>
@@ -201,10 +203,23 @@
         const c = cliente(p.clienteId);
         html += `<li><a href="#/c/${p.clienteId}" style="color:inherit;text-decoration:none">
           <div class="fila"><span>${esc(c ? c.nombre : '—')}</span><span class="rojo">${dinero(r.reditoAtrasado)}</span></div>
-          <div class="suave">Préstamo de ${dinero(p.monto)} · ${r.periodos.filter((x) => x.redito > x.pagado).length} quincena(s) sin pagar completa</div>
+          <div class="suave">Préstamo de ${dinero(p.monto)} · ${r.periodos.filter((x) => x.redito > x.pagado).length} corte(s) sin pagar completo</div>
         </a></li>`;
       }
       html += `</ul></div>`;
+    }
+
+    if (proximos.length) {
+      proximos.sort((a, b) => (a.r.actual.corte < b.r.actual.corte ? -1 : a.r.actual.corte > b.r.actual.corte ? 1 : 0));
+      html += `<h2 class="seccion">Próximos cobros</h2><div class="tarjeta"><ul class="lista">`;
+      for (const { p, r } of proximos.slice(0, 15)) {
+        const c = cliente(p.clienteId);
+        html += `<li><a href="#/c/${p.clienteId}" style="color:inherit;text-decoration:none">
+          <div class="fila"><span>${fecha(r.actual.corte)} · ${esc(c ? c.nombre : '—')}</span><span>${dinero(r.reditoActualPendiente)}</span></div>
+          <div class="suave">Préstamo de ${dinero(p.monto)} · ${frec(p)}</div>
+        </a></li>`;
+      }
+      html += `</ul>${proximos.length > 15 ? `<p class="suave">Y ${proximos.length - 15} más…</p>` : ''}</div>`;
     }
 
     if (!db.clientes.length) {
@@ -234,7 +249,7 @@
       html += `<a class="tarjeta" href="#/c/${c.id}">
         <h3>${esc(c.nombre)} ${estado}</h3>
         <div class="fila"><span class="suave">Capital pendiente</span><span>${dinero(r.capital)}</span></div>
-        <div class="fila"><span class="suave">Rédito por cobrar</span><span>${dinero(r.atrasado + r.quincena)}</span></div>
+        <div class="fila"><span class="suave">Rédito por cobrar</span><span>${dinero(r.atrasado + r.enCurso)}</span></div>
       </a>`;
     }
     html += `<button class="btn primario flotante" data-accion="nuevoCliente">+ Cliente</button>`;
@@ -309,7 +324,7 @@
       const r = resumenCliente(id);
       html += `<div class="cifras">
         <div class="cifra"><div class="et">Capital pendiente</div><div class="val">${dinero(r.capital)}</div></div>
-        <div class="cifra"><div class="et">Rédito de la quincena</div><div class="val">${dinero(r.quincena)}</div></div>
+        <div class="cifra"><div class="et">Rédito del próximo corte</div><div class="val">${dinero(r.enCurso)}</div></div>
         ${r.atrasado > 0 ? `<div class="cifra ancha" style="background:var(--rojo-claro)"><div class="et">Rédito atrasado</div><div class="val rojo">${dinero(r.atrasado)}</div></div>` : ''}
       </div>
       <a class="btn primario bloque" style="margin-top:12px" href="#/estado/${id}">Estado de cuenta para WhatsApp</a>`;
@@ -340,10 +355,10 @@
       ? '<span class="etiqueta ok">Saldado</span>'
       : r.reditoAtrasado > 0 ? '<span class="etiqueta mal">Atrasado</span>' : '<span class="etiqueta pend">Activo</span>';
     return `<div class="tarjeta">
-      <h3>${dinero(p.monto)} al ${pct(p.pct)} ${etiqueta}</h3>
-      <div class="suave" style="margin-bottom:6px">Desde ${fecha(p.fecha)}${p.nota ? ' · ' + esc(p.nota) : ''}</div>
+      <h3>${dinero(p.monto)} al ${pct(p.pct)} ${frec(p)} ${etiqueta}</h3>
+      <div class="suave" style="margin-bottom:6px">Desde ${fecha(p.fecha)}${Calc.esMensual(p) ? ` · cobra el día ${Calc.diaCobro(p)}` : ''}${p.nota ? ' · ' + esc(p.nota) : ''}</div>
       <div class="fila"><span class="suave">Capital pendiente</span><span>${dinero(r.capital)}</span></div>
-      ${r.saldado ? '' : `<div class="fila"><span class="suave">Rédito quincena (corte ${fecha(r.actual.corte)})</span><span>${dinero(r.reditoActualPendiente)}</span></div>`}
+      ${r.saldado ? '' : `<div class="fila"><span class="suave">Rédito ${delPeriodo(p)} (corte ${fecha(r.actual.corte)})</span><span>${dinero(r.reditoActualPendiente)}</span></div>`}
       ${r.reditoAtrasado > 0 ? `<div class="fila rojo"><span>Rédito atrasado</span><span>${dinero(r.reditoAtrasado)}</span></div>` : ''}
       <div class="botones">
         ${r.saldado ? '' : `<button class="btn primario" data-accion="nuevoPago" data-id="${p.id}">Registrar pago</button>`}
@@ -366,12 +381,23 @@
   acciones.editarPrestamo = (id) => formPrestamo(prestamo(id));
 
   function formPrestamo(p, clienteId) {
-    const ultimoPct = db.prestamos.length ? db.prestamos[db.prestamos.length - 1].pct : '';
+    const ultimo = db.prestamos.length ? db.prestamos[db.prestamos.length - 1] : null;
+    const mensual = p ? Calc.esMensual(p) : !!(ultimo && Calc.esMensual(ultimo));
+    const ultimoPct = ultimo && Calc.esMensual(ultimo) === mensual ? ultimo.pct : '';
     abrirModal(`
       <h2>${p ? 'Editar préstamo' : 'Nuevo préstamo'}</h2>
       <label>Monto prestado<input name="monto" type="number" inputmode="decimal" step="0.01" min="0.01" required value="${p ? p.monto : ''}"></label>
       <label>Fecha del préstamo<input name="fecha" type="date" required value="${p ? p.fecha : hoy()}"></label>
-      <label>Rédito quincenal (%)<input name="pct" type="number" inputmode="decimal" step="0.01" min="0" required value="${p ? p.pct : ultimoPct}"></label>
+      <label>Cobro
+        <select name="frecuencia">
+          <option value="quincenal" ${mensual ? '' : 'selected'}>Quincenal (15 y 30)</option>
+          <option value="mensual" ${mensual ? 'selected' : ''}>Mensual</option>
+        </select>
+      </label>
+      <label id="campo-dia" ${mensual ? '' : 'hidden'}>Día de cobro cada mes
+        <input name="diaCobro" type="number" inputmode="numeric" min="1" max="31" value="${p && p.diaCobro ? p.diaCobro : ''}" placeholder="Ej: 5, 15, 30">
+      </label>
+      <label><span id="et-pct">Rédito ${mensual ? 'mensual' : 'quincenal'} (%)</span><input name="pct" type="number" inputmode="decimal" step="0.01" min="0" required value="${p ? p.pct : ultimoPct}"></label>
       <div class="vista-previa suave" id="prev-prestamo"></div>
       <label>Nota (opcional)<input name="nota" value="${esc(p ? p.nota || '' : '')}"></label>
     `, (f) => {
@@ -380,19 +406,31 @@
       if (!(monto > 0)) return 'Escribe un monto válido';
       if (!(tasa >= 0)) return 'Escribe un porcentaje válido';
       if (!f.fecha.value) return 'Escoge la fecha';
-      if (p) {
-        Object.assign(p, { monto, pct: tasa, fecha: f.fecha.value, nota: f.nota.value.trim() });
+      const datos = { monto, pct: tasa, fecha: f.fecha.value, nota: f.nota.value.trim(), frecuencia: f.frecuencia.value };
+      if (datos.frecuencia === 'mensual') {
+        const dia = parseInt(f.diaCobro.value, 10);
+        if (!(dia >= 1 && dia <= 31)) return 'Escribe el día de cobro (1 a 31)';
+        datos.diaCobro = dia;
       } else {
-        db.prestamos.push({ id: nuevoId(), clienteId, monto, pct: tasa, fecha: f.fecha.value, nota: f.nota.value.trim(), creado: Date.now() });
+        datos.diaCobro = null;
       }
+      if (p) Object.assign(p, datos);
+      else db.prestamos.push(Object.assign({ id: nuevoId(), clienteId, creado: Date.now() }, datos));
       guardar();
       rutear();
     }, (f) => {
       const monto = numero(f.monto.value);
       const tasa = numero(f.pct.value);
       const prev = $('#prev-prestamo');
-      if (monto > 0 && tasa >= 0 && f.fecha.value) {
-        prev.innerHTML = `Rédito por quincena: <b>${dinero(Calc.r2(monto * tasa / 100))}</b><br>Primer corte: ${fecha(Calc.siguienteCorte(f.fecha.value))}`;
+      const esMes = f.frecuencia.value === 'mensual';
+      $('#campo-dia').hidden = !esMes;
+      $('#et-pct').textContent = `Rédito ${esMes ? 'mensual' : 'quincenal'} (%)`;
+      // Al escoger mensual por primera vez, el día de cobro sugerido es el día del préstamo
+      if (esMes && !f.diaCobro.value && f.fecha.value) f.diaCobro.value = Number(f.fecha.value.slice(8));
+      const dia = parseInt(f.diaCobro.value, 10);
+      if (monto > 0 && tasa >= 0 && f.fecha.value && (!esMes || (dia >= 1 && dia <= 31))) {
+        const primero = Calc.siguienteCorteDe({ fecha: f.fecha.value, frecuencia: f.frecuencia.value, diaCobro: dia }, f.fecha.value);
+        prev.innerHTML = `Rédito por ${esMes ? 'mes' : 'quincena'}: <b>${dinero(Calc.r2(monto * tasa / 100))}</b><br>Primer corte: ${fecha(primero)}`;
       } else prev.textContent = 'Llena monto, fecha y porcentaje para ver el rédito.';
     });
   }
@@ -416,12 +454,13 @@
       <div class="fila"><span class="suave">Cliente</span><span><a href="#/c/${c.id}">${esc(c.nombre)}</a></span></div>
       <div class="fila"><span class="suave">Monto prestado</span><span>${dinero(p.monto)}</span></div>
       <div class="fila"><span class="suave">Fecha</span><span>${fecha(p.fecha)}</span></div>
-      <div class="fila"><span class="suave">Rédito quincenal</span><span>${pct(p.pct)}</span></div>
+      <div class="fila"><span class="suave">Rédito ${frec(p)}</span><span>${pct(p.pct)}</span></div>
+      ${Calc.esMensual(p) ? `<div class="fila"><span class="suave">Día de cobro</span><span>${Calc.diaCobro(p)} de cada mes</span></div>` : ''}
       <div class="fila"><span class="suave">Capital pagado</span><span>${dinero(r.capitalPagado)}</span></div>
       <div class="fila"><span class="suave">Rédito pagado</span><span>${dinero(r.reditoPagado)}</span></div>
       <div class="fila total"><span>Capital pendiente</span><span>${dinero(r.capital)}</span></div>
       ${r.saldado ? '' : `
-      <div class="fila"><span>Rédito quincena (corte ${fecha(r.actual.corte)})</span><span>${dinero(r.reditoActualPendiente)}</span></div>
+      <div class="fila"><span>Rédito ${delPeriodo(p)} (corte ${fecha(r.actual.corte)})</span><span>${dinero(r.reditoActualPendiente)}</span></div>
       ${r.reditoAtrasado > 0 ? `<div class="fila rojo"><span>Rédito atrasado</span><span>${dinero(r.reditoAtrasado)}</span></div>` : ''}
       <div class="fila total"><span>Para saldar hoy</span><span>${dinero(paraSaldar)}</span></div>`}
       <div class="botones">
@@ -439,11 +478,11 @@
       html += `</ul></div>`;
     }
 
-    const quincenas = r.periodos.concat(r.saldado ? [] : [r.actual]).reverse();
-    if (quincenas.length) {
-      html += `<h2 class="seccion">Quincenas</h2><div class="tarjeta tabla-scroll"><table>
+    const filas = r.periodos.concat(r.saldado ? [] : [r.actual]).reverse();
+    if (filas.length) {
+      html += `<h2 class="seccion">${Calc.esMensual(p) ? 'Meses' : 'Quincenas'}</h2><div class="tarjeta tabla-scroll"><table>
         <tr><th>Corte</th><th>Capital</th><th>Rédito</th><th>Pagado</th><th></th></tr>`;
-      for (const q of quincenas) {
+      for (const q of filas) {
         const enCurso = q === r.actual;
         const est = q.pagado >= q.redito
           ? '<span class="etiqueta ok" title="Pagado">✓</span>'
@@ -519,11 +558,13 @@
   // ---------- Estado de cuenta ----------
 
   function cortesCliente(clienteId) {
-    const prestamos = prestamosDe(clienteId);
-    if (!prestamos.length) return [];
-    const desde = prestamos.reduce((m, p) => (p.fecha < m ? p.fecha : m), prestamos[0].fecha);
-    const hasta = Calc.esCorte(hoy()) ? hoy() : Calc.siguienteCorte(hoy());
-    return Calc.cortesEntre(Calc.siguienteCorte(desde), hasta);
+    // Todos los cortes de sus préstamos (quincenales y mensuales) hasta el próximo de cada uno
+    const h = hoy();
+    const todos = new Set();
+    for (const p of prestamosDe(clienteId)) {
+      for (const c of Calc.cortesDe(p, Calc.siguienteCorteDe(p, h))) todos.add(c);
+    }
+    return [...todos].sort().reverse();
   }
 
   function corteCercano(cortes) {
@@ -540,32 +581,31 @@
     lineas.push('Cliente: ' + c.nombre);
     lineas.push('Corte: ' + fecha(corte));
     let totalPagar = 0, totalCapital = 0, n = 0;
+    const incluidos = [];
     const prestamos = prestamosDe(clienteId).filter((p) => p.fecha < corte).reverse();
 
     for (const p of prestamos) {
       const r = Calc.calcularPrestamo(p, db.pagos, corte);
       const per = r.periodos.find((x) => x.corte === corte);
-      const pagosQuincena = per ? r.detalle.filter((d) => d.pago.fecha > per.inicio && d.pago.fecha <= corte) : [];
-      // Se omite si ya estaba saldado antes de esta quincena
-      if (!per && r.saldado) continue;
-      if (per && r.saldado && !pagosQuincena.length && per.base <= 0) continue;
+      const pagosPeriodo = per ? r.detalle.filter((d) => d.pago.fecha > per.inicio && d.pago.fecha <= corte) : [];
+      // Se omite si ese día no es corte de este préstamo o si ya estaba saldado antes
+      if (!per) continue;
+      if (per && r.saldado && !pagosPeriodo.length && per.base <= 0) continue;
       n++;
+      incluidos.push(p);
       const atrasadoPrevio = Calc.r2(r.periodos.filter((x) => x !== per).reduce((s, x) => s + Math.max(0, x.redito - x.pagado), 0));
-      const pendQuincena = per ? Calc.r2(Math.max(0, per.redito - per.pagado)) : 0;
-      const aPagar = Calc.r2(atrasadoPrevio + pendQuincena);
+      const aPagar = Calc.r2(atrasadoPrevio + Math.max(0, per.redito - per.pagado));
       totalPagar += aPagar;
       totalCapital += r.capital;
 
       lineas.push('');
-      lineas.push(`*Préstamo de ${dinero(p.monto)}* (${pct(p.pct)} quincenal, desde ${fecha(p.fecha)})`);
-      if (per) {
-        lineas.push(`Rédito de esta quincena: ${dinero(per.redito)}`);
-        if (per.pagado > 0) lineas.push(`Rédito pagado: ${dinero(per.pagado)}`);
-      }
+      lineas.push(`*Préstamo de ${dinero(p.monto)}* (${pct(p.pct)} ${frec(p)}, desde ${fecha(p.fecha)})`);
+      lineas.push(`Rédito de ${estePeriodo(p)}: ${dinero(per.redito)}`);
+      if (per.pagado > 0) lineas.push(`Rédito pagado: ${dinero(per.pagado)}`);
       if (atrasadoPrevio > 0) lineas.push(`Rédito atrasado: ${dinero(atrasadoPrevio)}`);
-      if (pagosQuincena.length) {
-        lineas.push('Pagos de la quincena:');
-        for (const d of pagosQuincena) {
+      if (pagosPeriodo.length) {
+        lineas.push(`Pagos ${delPeriodo(p)}:`);
+        for (const d of pagosPeriodo) {
           lineas.push(`- ${fecha(d.pago.fecha)}: ${dinero(d.pago.monto)} (rédito ${dinero(d.aRedito)}, capital ${dinero(d.aCapital)})`);
         }
       }
@@ -580,15 +620,15 @@
       lineas.push(`*Total capital pendiente: ${dinero(totalCapital)}*`);
       lineas.push(`*Total pendiente por pagar: ${dinero(totalPagar)}*`);
     }
-    if (totalCapital > 0) {
-      const sig = Calc.siguienteCorte(corte);
-      const proximo = prestamos.reduce((s, p) => {
-        const r = Calc.calcularPrestamo(p, db.pagos, corte);
-        return r.saldado ? s : s + r.actual.redito;
-      }, 0);
-      lineas.push('');
-      lineas.push(`Próximo corte ${fecha(sig)}: rédito ${dinero(proximo)}`);
+    // Próximos cortes de los préstamos incluidos, agrupados por fecha
+    const proximos = {};
+    for (const p of incluidos) {
+      const r = Calc.calcularPrestamo(p, db.pagos, corte);
+      if (!r.saldado) proximos[r.actual.corte] = (proximos[r.actual.corte] || 0) + r.actual.redito;
     }
+    const fechas = Object.keys(proximos).sort();
+    if (fechas.length) lineas.push('');
+    for (const f of fechas) lineas.push(`Próximo corte ${fecha(f)}: rédito ${dinero(proximos[f])}`);
     return lineas.join('\n');
   }
 
@@ -681,8 +721,9 @@
 
       <div class="tarjeta">
         <h3>Cómo se calcula</h3>
-        <p class="suave">Los cortes son el 15 y el 30 de cada mes (en febrero, el último día). En cada corte se cobra el rédito: capital pendiente al inicio de la quincena × porcentaje del préstamo. La primera quincena va desde la fecha del préstamo hasta el primer corte.</p>
-        <p class="suave">Cada pago cubre primero el rédito atrasado, luego el de la quincena en curso, y lo que sobre se descuenta del capital. El abono a capital baja el rédito desde la quincena siguiente.</p>
+        <p class="suave">Quincenales: los cortes son el 15 y el 30 de cada mes (en febrero, el último día). Mensuales: un corte al mes, el día de cobro que escojas (si el mes no tiene ese día, el último del mes).</p>
+        <p class="suave">En cada corte se cobra el rédito: capital pendiente al inicio del período × porcentaje del préstamo. El primer período va desde la fecha del préstamo hasta el primer corte y se cobra completo.</p>
+        <p class="suave">Cada pago cubre primero el rédito atrasado, luego el del período en curso, y lo que sobre se descuenta del capital. El abono a capital baja el rédito desde el período siguiente.</p>
       </div>
 
       <div class="tarjeta">

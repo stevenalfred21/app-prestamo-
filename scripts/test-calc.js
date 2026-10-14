@@ -27,4 +27,30 @@ assert.equal(r.capital,7000); assert.equal(r.actual.redito,700);
 pagos.push({id:4,prestamoId:'p',fecha:'2026-10-20',monto:7700,creado:4});
 r=C.calcularPrestamo(p,pagos,'2027-05-01');
 assert.ok(r.saldado); assert.equal(r.capital,0);
+
+// ---- Mensual ----
+assert.equal(C.siguienteCorteMensual('2026-01-10', 30), '2026-01-30');
+assert.equal(C.siguienteCorteMensual('2026-01-30', 30), '2026-02-28');
+assert.equal(C.siguienteCorteMensual('2026-02-28', 30), '2026-03-30');
+assert.equal(C.siguienteCorteMensual('2028-01-31', 31), '2028-02-29');
+assert.equal(C.siguienteCorteMensual('2026-03-05', 5), '2026-04-05');
+// Préstamo de 10,000 al 20% mensual, cobro el día 5, prestado el 20/08: primer corte 05/09 completo
+const m = { id: 'm', monto: 10000, fecha: '2026-08-20', pct: 20, frecuencia: 'mensual', diaCobro: 5 };
+assert.deepEqual(C.cortesDe(m, '2026-11-05'), ['2026-09-05', '2026-10-05', '2026-11-05']);
+const pm = [
+  { id: 1, prestamoId: 'm', fecha: '2026-09-05', monto: 4000, creado: 1 }, // 2000 rédito + 2000 capital
+  { id: 2, prestamoId: 'm', fecha: '2026-10-07', monto: 1600, creado: 2 }, // rédito de 8000 al 20%
+];
+r = C.calcularPrestamo(m, pm, '2026-10-14');
+assert.deepEqual(r.detalle.map((d) => [d.aRedito, d.aCapital]), [[2000, 2000], [1600, 0]]);
+assert.equal(r.capital, 8000);
+assert.equal(r.reditoAtrasado, 0);
+assert.equal(r.actual.corte, '2026-11-05');
+assert.equal(r.reditoActualPendiente, 1600);
+// Sin pagar: a la fecha 06/11 se deben dos meses
+r = C.calcularPrestamo(m, pm.slice(0, 1), '2026-11-06');
+assert.equal(r.reditoAtrasado, 3200);
+// Préstamo sin frecuencia (datos viejos) sigue siendo quincenal
+assert.equal(C.siguienteCorteDe({ fecha: '2026-01-01' }, '2026-01-01'), '2026-01-15');
+
 console.log('ok');

@@ -1,6 +1,6 @@
 # Préstamos
 
-App web (PWA) para llevar préstamos con rédito quincenal desde el celular. No usa servidor: todo se guarda en el dispositivo.
+App para llevar préstamos con rédito quincenal o mensual desde el celular. No usa servidor: todo se guarda en el dispositivo.
 
 ## Qué hace
 
@@ -13,11 +13,13 @@ App web (PWA) para llevar préstamos con rédito quincenal desde el celular. No 
 
 ## Cómo calcula
 
-- Cortes: día 15 y día 30 de cada mes (en febrero, el último día del mes).
-- En cada corte se genera el rédito: capital pendiente al inicio de la quincena × porcentaje del préstamo.
-- La primera quincena va desde la fecha del préstamo hasta el primer corte, y se cobra completa.
-- Un pago cubre primero el rédito atrasado, luego el de la quincena en curso, y lo que sobra se descuenta del capital.
-- El abono a capital baja el rédito a partir de la quincena siguiente.
+- Cada préstamo es **quincenal** o **mensual**, con su propio porcentaje.
+- Quincenal: cortes el día 15 y el 30 de cada mes (en febrero, el último día del mes).
+- Mensual: un corte al mes, el día de cobro que escojas al crear el préstamo. Si el mes no tiene ese día (por ejemplo el 31), se cobra el último día del mes.
+- En cada corte se genera el rédito: capital pendiente al inicio del período × porcentaje del préstamo.
+- El primer período va desde la fecha del préstamo hasta el primer corte, y se cobra completo.
+- Un pago cubre primero el rédito atrasado, luego el del período en curso, y lo que sobra se descuenta del capital.
+- El abono a capital baja el rédito a partir del período siguiente.
 
 ## Instalar
 
