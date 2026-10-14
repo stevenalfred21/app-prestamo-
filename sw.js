@@ -1,5 +1,5 @@
 // Cambia la versión cuando publiques cambios para que los celulares descarguen la nueva.
-const CACHE = 'prestamos-v2';
+const CACHE = 'prestamos-v3';
 const ARCHIVOS = [
   './',
   './index.html',

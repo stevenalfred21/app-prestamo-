@@ -25,12 +25,25 @@
 
   <nav class="tabs">
     <a href="#/" data-tab="resumen">Resumen</a>
+    <a href="#/cobros" data-tab="cobros">Cobros</a>
     <a href="#/clientes" data-tab="clientes">Clientes</a>
     <a href="#/ajustes" data-tab="ajustes">Ajustes</a>
   </nav>
 
   <dialog id="modal"><form method="dialog" id="modal-form"></form></dialog>
   <div id="aviso" role="status"></div>
+
+  <div id="bloqueo" hidden>
+    <form id="form-pin" autocomplete="off">
+      <div class="candado">$</div>
+      <h2>Préstamos</h2>
+      <p class="suave">Escribe tu PIN para entrar</p>
+      <input id="pin-entrada" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" aria-label="PIN">
+      <p class="rojo" id="pin-error" hidden>PIN incorrecto</p>
+      <button type="submit" class="btn primario bloque">Entrar</button>
+      <button type="button" class="btn bloque" id="pin-olvido" style="margin-top:8px">Olvidé mi PIN</button>
+    </form>
+  </div>
 
   <script src="calc.js"></script>
   <script src="app.js"></script>

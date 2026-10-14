@@ -53,4 +53,36 @@ assert.equal(r.reditoAtrasado, 3200);
 // Préstamo sin frecuencia (datos viejos) sigue siendo quincenal
 assert.equal(C.siguienteCorteDe({ fecha: '2026-01-01' }, '2026-01-01'), '2026-01-15');
 
+// ---- Prestar más: el capital nuevo genera rédito desde el período siguiente ----
+const pc = { id: 'pc', monto: 10000, fecha: '2026-09-01', pct: 10 };
+const movs = [{ id: 'm1', prestamoId: 'pc', tipo: 'capital', fecha: '2026-09-20', monto: 5000, creado: 1 }];
+r = C.calcularPrestamo(pc, [], '2026-10-01', movs);
+assert.equal(r.capital, 15000);
+assert.deepEqual(r.periodos.map((x) => x.redito), [1000, 1000]); // 15/09 y 30/09 sobre 10,000
+assert.equal(r.actual.redito, 1500); // 15/10 sobre 15,000
+assert.equal(r.capitalAgregado, 5000);
+
+// ---- Mora: se cobra antes que el rédito ----
+const pm2 = { id: 'pm2', monto: 10000, fecha: '2026-09-01', pct: 10 };
+const movsMora = [{ id: 'x', prestamoId: 'pm2', tipo: 'mora', fecha: '2026-09-21', monto: 200, creado: 1 }];
+r = C.calcularPrestamo(pm2, [{ id: 'p', prestamoId: 'pm2', fecha: '2026-09-22', monto: 1500, creado: 2 }], '2026-09-25', movsMora);
+assert.deepEqual([r.detalle[0].aMora, r.detalle[0].aRedito, r.detalle[0].aCapital], [200, 1300, 0]);
+assert.equal(r.moraPendiente, 0);
+assert.equal(r.reditoAtrasado, 0); // 1,000 del 15/09 pagado
+assert.equal(r.reditoActualPendiente, 700); // 300 adelantado de la quincena del 30/09
+// Sin pagar, la mora queda pendiente y el préstamo no está saldado
+r = C.calcularPrestamo(pm2, [], '2026-09-25', movsMora);
+assert.equal(r.moraPendiente, 200);
+assert.equal(r.vencidoDesde, '2026-09-15');
+
+// ---- Descuento: perdona rédito pendiente, del más viejo primero ----
+r = C.calcularPrestamo(pm2, [], '2026-10-01', [{ id: 'd', prestamoId: 'pm2', tipo: 'descuento', fecha: '2026-10-01', monto: 1500, creado: 1 }]);
+assert.equal(r.reditoAtrasado, 500);
+assert.equal(r.reditoPagado, 0); // perdonado no cuenta como cobrado
+assert.equal(r.vencidoDesde, '2026-09-30');
+
+// ---- Días entre fechas ----
+assert.equal(C.diasEntre('2026-09-15', '2026-09-20'), 5);
+assert.equal(C.diasEntre('2026-02-28', '2026-03-01'), 1);
+
 console.log('ok');

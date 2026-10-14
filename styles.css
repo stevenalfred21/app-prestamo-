@@ -150,3 +150,30 @@ th, td { padding: 6px 3px; text-align: right; border-bottom: 1px solid var(--bor
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--suave); font-weight: 600; }
 .tabla-scroll { overflow-x: auto; }
+
+/* Pantalla de bloqueo con PIN */
+#bloqueo {
+  position: fixed; inset: 0; z-index: 50; background: var(--fondo);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+#bloqueo[hidden] { display: none; }
+#bloqueo form { width: min(320px, 100%); text-align: center; }
+#bloqueo h2 { margin: 12px 0 4px; }
+#bloqueo input { text-align: center; font-size: 1.6rem; letter-spacing: .4em; margin: 12px 0; }
+.candado {
+  width: 72px; height: 72px; margin: 0 auto; border-radius: 18px; background: var(--verde); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 2.4rem; font-weight: 800;
+}
+
+/* Aviso destacado (respaldo pendiente, etc.) */
+.alerta {
+  background: var(--ambar-claro); color: var(--texto); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;
+  border: 1px solid transparent;
+}
+.alerta b { color: var(--ambar); }
+.alerta .botones { margin-top: 8px; }
+
+.cobro .fila span:first-child { font-weight: 600; }
+.cobro .botones { margin-top: 6px; }
+.datos-cliente { margin: 6px 0 0; font-size: .9rem; }
+.datos-cliente div { padding: 2px 0; }
